@@ -20,7 +20,7 @@ module Atig
         db.statuses.find_all(:limit=>50).reverse_each do|entry|
           case entry.source
           when :timeline, :me
-            @channel.message entry
+            message entry
           end
         end
 
@@ -43,7 +43,7 @@ module Atig
               entry.source == :timeline or
               entry.source == :user_stream or
               entry.source == :me then
-            @channel.message entry
+            message entry
           end
         end
 
@@ -70,6 +70,13 @@ module Atig
       end
 
       def channel_name; "#twitter" end
+
+      private
+      def message(entry)
+        entry.status[:belongs] = @db.lists.find_by_screen_name(entry.user.screen_name)
+        pp entry
+        @channel.message entry
+      end
     end
   end
 end
