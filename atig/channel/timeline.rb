@@ -73,9 +73,9 @@ module Atig
 
       private
       def message(entry)
-        entry.status[:belongs] = @db.lists.find_by_screen_name(entry.user.screen_name)
-        pp entry
-        @channel.message entry
+        e = entry.dup
+        e.status = e.status.merge :belongs => @db.lists.find_by_screen_name(entry.user.screen_name)
+        @channel.message e
       end
     end
   end
