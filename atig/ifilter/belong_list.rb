@@ -8,7 +8,7 @@ module Atig
         if status.belongs == nil || status.belongs.empty? then
           status
         else
-          status.merge :text => "#{status.text} \x0310[#{status.belongs.join(",")}]\x0F"
+          status.merge :text => "#{status.text} \x0309[#{status.belongs.join(",")}]\x0F"
         end
       end
     end
