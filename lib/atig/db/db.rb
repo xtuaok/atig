@@ -12,7 +12,7 @@ module Atig
   module Db
     class Db
       include Util
-      attr_reader :followings, :statuses, :dms, :lists, :noretweets
+      attr_reader :followings, :statuses, :dms, :lists, :noretweets, :mute
       attr_accessor :me
       VERSION = 4
 
@@ -26,6 +26,7 @@ module Atig
         @dms        = Statuses.new   dir('dm')
         @lists      = Lists.new      dir('lists.%s')
         @noretweets = Array.new
+        @mute       = {:client => nil, :user => nil, :text => nil }
 
         log :info, "initialize"
       end

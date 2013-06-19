@@ -8,10 +8,18 @@ module Atig
         super
 
         db.statuses.find_all(:limit=>50).reverse_each {|entry|
+          next if db.mute[:user] and /#{db.mute[:user]}/ =~ entry.status.user.screen_name
+          next if db.mute[:text] and /#{db.mute[:text]}/ =~ entry.status.text
+          next if db.mute[:client] and /#{db.mute[:client]}/ =~ entry.status.source
+
           message entry
         }
 
         db.statuses.listen {|entry|
+          next if db.mute[:user] and /#{db.mute[:user]}/ =~ entry.status.user.screen_name
+          next if db.mute[:text] and /#{db.mute[:text]}/ =~ entry.status.text
+          next if db.mute[:client] and /#{db.mute[:client]}/ =~ entry.status.source
+
           message entry
         }
       end

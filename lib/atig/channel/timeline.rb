@@ -38,6 +38,9 @@ module Atig
         end if UpdateChecker.git_repos?
 
         db.statuses.listen do|entry|
+          next if db.mute[:user] and /#{db.mute[:user]}/ =~ entry.status.user.screen_name
+          next if db.mute[:text] and /#{db.mute[:text]}/ =~ entry.status.text
+          next if db.mute[:client] and /#{db.mute[:client]}/ =~ entry.status.source
           if db.followings.include?(entry.user) or
               entry.source == :timeline or
               entry.source == :user_stream or

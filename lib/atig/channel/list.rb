@@ -37,6 +37,10 @@ module Atig
         end
 
         db.statuses.listen do|entry|
+          next if db.mute[:user] and /#{db.mute[:user]}/ =~ entry.status.user.screen_name
+          next if db.mute[:text] and /#{db.mute[:text]}/ =~ entry.status.text
+          next if db.mute[:client] and /#{db.mute[:client]}/ =~ entry.status.source
+
           if entry.source == :list then
             @channels[entry.list].message entry
           else
