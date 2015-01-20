@@ -23,7 +23,7 @@ module Atig
 
                 db.statuses.transaction do|d|
                   xs = d.find_by_screen_name db.me.screen_name,:limit=>1
-                  d.remove_by_id entry.id
+                  d.remove_by_id entry.status.id
                   ys = d.find_by_screen_name db.me.screen_name,:limit=>1
 
                   unless xs.map{|x| x.id} == ys.map{|y| y.id} then

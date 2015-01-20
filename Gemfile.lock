@@ -2,31 +2,49 @@ PATH
   remote: .
   specs:
     atig (0.4.5)
+      groonga
       net-irc
       oauth
-      sqlite3 (>= 1.3.2)
       twitter-text (~> 1.7.0)
 
 GEM
   remote: https://rubygems.org/
   specs:
-    coveralls (0.7.1)
-      multi_json (~> 1.3)
-      rest-client
-      simplecov (>= 0.7)
-      term-ansicolor
-      thor
+    archive-zip (0.7.0)
+      io-like (~> 0.3.0)
+    coveralls (0.7.3)
+      multi_json (~> 1.10)
+      rest-client (~> 1.7)
+      simplecov (~> 0.9.1)
+      term-ansicolor (~> 1.3)
+      thor (~> 0.19.1)
     diff-lcs (1.2.5)
     docile (1.1.5)
-    mime-types (2.4.1)
+    gqtp (1.0.6)
+    groonga (1.0.0)
+      rroonga
+    groonga-client (0.1.0)
+      gqtp (>= 1.0.4)
+      groonga-command (>= 1.0.8)
+    groonga-command (1.0.9)
+      json
+    io-like (0.3.0)
+    json (1.8.2)
+    mime-types (2.4.3)
     multi_json (1.10.1)
     net-irc (0.0.9)
-    netrc (0.7.7)
+    netrc (0.10.2)
     oauth (0.4.7)
-    rake (10.3.2)
+    pkg-config (1.1.6)
+    rake (10.4.2)
     rest-client (1.7.2)
       mime-types (>= 1.16, < 3.0)
       netrc (~> 0.7)
+    rroonga (4.0.8)
+      archive-zip
+      groonga-client (>= 0.0.3)
+      json
+      pkg-config
     rspec (3.0.0)
       rspec-core (~> 3.0.0)
       rspec-expectations (~> 3.0.0)
@@ -44,7 +62,6 @@ GEM
       multi_json (~> 1.0)
       simplecov-html (~> 0.8.0)
     simplecov-html (0.8.0)
-    sqlite3 (1.3.9)
     term-ansicolor (1.3.0)
       tins (~> 1.0)
     thor (0.19.1)

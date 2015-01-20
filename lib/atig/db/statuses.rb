@@ -1,9 +1,7 @@
 # -*- mode:ruby; coding:utf-8 -*-
 require 'atig/db/listenable'
-require 'atig/db/transaction'
-require 'sqlite3'
+require 'atig/db/groonga'
 require 'atig/db/roman'
-require 'atig/db/sql'
 require 'base64'
 
 class OpenStruct
@@ -14,135 +12,127 @@ module Atig
   module Db
     class Statuses
       include Listenable
-      include Transaction
+      include GroongaUtil
 
       Size = 400
 
       def initialize(name)
-        @db = Sql.new name
+        name.gsub!(/\^/, '@')
+        @db = Groonga[name]
+        @iddb = Groonga['Id']
         @roman = Roman.new
-
-        unless File.exist? name then
-          @db.execute do|db|
-            db.execute %{create table status (
-                          id integer primary key,
-                          status_id   text,
-                          tid  text,
-                          sid  text,
-                          screen_name text,
-                          user_id     text,
-                          created_at  integer,
-                          data blob);}
-
-            db.execute %{create table id (
-                          id integer primary key,
-                          screen_name text,
-                          count integer);}
-
-            # thx to @L_star
-            # http://d.hatena.ne.jp/mzp/20100407#c
-            db.execute_batch %{
-              create index status_createdat on status(created_at);
-              create index status_sid on status(sid);
-              create index status_statusid on status(status_id);
-              create index status_tid on status(tid);
-              create index status_userid on status(user_id);
-
-              create index status_id on status(id);
-              create index id_id on id(id);
-            }
+        @mutex = Mutex.new
+        unless @db then
+          Groonga::Schema.create_table(name, type: :hash) do |table|
+            table.integer64(:id)
+            table.text(:status_id)
+            table.text(:tid)
+            table.text(:sid)
+            table.text(:screen_name)
+            table.text(:user_id)
+            table.integer64(:created_at)
+            table.text(:data)
           end
+          @db = Groonga[name]
+       end
+       unless @iddb then
+          Groonga::Schema.create_table('Id', type: :hash) do |table|
+            table.text(:screen_name)
+            table.integer64(:count)
+          end
+          @iddb = Groonga['Id']
         end
       end
 
       def add(opt)
-        @db.execute do|db|
           id  = opt[:status].id
-          return unless db.execute(%{SELECT id FROM status WHERE status_id = ?}, id).empty?
+          return if @db[id.to_s]
 
           screen_name = opt[:user].screen_name
-          sum   = db.get_first_value("SELECT sum(count) FROM id").to_i
-          count = db.get_first_value("SELECT count      FROM id WHERE screen_name = ?", screen_name).to_i
+          sum = @iddb.records.inject(0) do |sum, r| sum + r.count end
+          record = @iddb[screen_name]
+          count = record ? record.count : 0
           entry = OpenStruct.new opt.merge(tid: @roman.make(sum),
                                            sid: "#{screen_name}:#{@roman.make(count)}")
-          db.execute(%{INSERT INTO status
-                      VALUES(NULL, :id, :tid, :sid, :screen_name, :user_id, :created_at, :data)},
-                     id: id,
-                     tid: entry.tid,
-                     sid: entry.sid,
-                     screen_name: screen_name,
-                     user_id: opt[:user].id,
-                     created_at: Time.parse(opt[:status].created_at).to_i,
-                     data: @db.dump(entry))
-          if count == 0 then
-            db.execute("INSERT INTO id VALUES(NULL,?,?)", screen_name, 1)
-          else
-            db.execute("UPDATE id SET count = ? WHERE screen_name = ?", count + 1, screen_name)
-          end
+
+          attr = {
+           id: id,
+           status_id: id.to_s,
+           tid: entry.tid,
+           sid: entry.sid,
+           screen_name: screen_name,
+           user_id: opt[:user].id,
+           created_at: Time.parse(opt[:status].created_at).to_i,
+           data: _dump(entry)
+          }
+          @db.add(id.to_s, attr)
+          @iddb.add(screen_name, screen_name: screen_name, count: count + 1)
           notify entry
-        end
       end
 
       def find_all(opt={})
-        find '1', 1, opt
+        @db.sort([['created_at', :desc]], limit: opt.fetch(:limit, 20)).map do |r| _load(r.data) end 
       end
 
       def find_by_screen_name(name, opt={})
-        find 'screen_name',name, opt
+        expr = lambda {|r| r.screen_name == name }
+        find expr, opt
       end
 
       def find_by_user(user, opt={})
-        find 'user_id', user.id, opt
+        expr = lambda {|r| r.user_id == user.id }
+        find expr, opt
       end
 
       def find_by_tid(tid)
-        find('tid', tid).first
+        expr = lambda {|r| r.tid == tid }
+        find(expr).first
       end
 
-      def find_by_sid(tid)
-        find('sid', tid).first
+      def find_by_sid(sid)
+        expr = lambda {|r| r.sid == sid }
+        find(expr).first
       end
 
       def find_by_status_id(id)
-        find('status_id', id).first
+        expr = lambda {|r| r.status_id == id }
+        find(expr).first
       end
 
       def find_by_id(id)
-        find('id', id).first
+        @db[id.to_s]
       end
 
       def remove_by_id(id)
-        @db.execute do|db|
-          db.execute "DELETE FROM status WHERE id = ?",id
-        end
+        @db.delete(id.to_s)
+      end
+
+      def transaction(&f)
+        @mutex.synchronize {
+          f.call self
+        }
       end
 
       def cleanup
-        @db.execute do|db|
-          created_at = db.execute("SELECT created_at FROM status ORDER BY created_at DESC LIMIT 1 OFFSET ?", Size-1)
-          unless created_at.empty? then
-            db.execute "DELETE FROM status WHERE created_at < ?", created_at.first
-          end
-          db.execute "VACUUM status"
+        return if @db.size < Size - 1
+        record = @db.select.sort([['created_at', :desc]], offset: (Size - 1)) .first
+        if record
+          records = @db.select do |r| r.created_at < record.created_at end
+          records.each do |r| @db.delete(r._key) end
         end
       end
 
       private
-      def find(lhs,rhs, opt={},&f)
-        rhs.encoding!("UTF-8") if rhs.respond_to? :encoding!
+      def find(expr,opt={},&f)
+        records = @db.select do |r| expr.call(r) end.sort([['created_at',:desc]],limit: opt.fetch(:limit,20))
+        records.map do|r| _load(r.data) end
+      end
 
-        query  = "SELECT id,data FROM status WHERE #{lhs} = :rhs ORDER BY created_at DESC LIMIT :limit"
-        params = { rhs: rhs, limit: opt.fetch(:limit,20) }
-        res = []
-
-        @db.execute do|db|
-          db.execute(query,params) do|id,data,*_|
-            e = @db.load(data)
-            e.id = id.to_i
-            res << e
-          end
-        end
-        res
+      def xfind(lhs,rhs, opt={},&f)
+        records = @db.select do |r|
+          r.send(lhs) == rhs
+        end.sort([['created_at', :desc]], limit: opt.fetch(:limit, 20)) 
+        records.map do |r| _load(r.data) end
       end
     end
   end

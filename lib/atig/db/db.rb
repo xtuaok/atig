@@ -1,5 +1,6 @@
 # -*- mode:ruby; coding:utf-8 -*-
 
+require 'atig/db/groonga'
 require 'atig/db/followings'
 require 'atig/db/statuses'
 require 'atig/db/lists'
@@ -21,39 +22,30 @@ module Atig
         @me         = opt[:me]
         @tmpdir     = opt[:tmpdir]
 
-        @followings = Followings.new dir('following')
-        @statuses   = Statuses.new   dir('status')
-        @dms        = Statuses.new   dir('dm')
-        @lists      = Lists.new      dir('lists.%s')
+        Groonga::Database.open dir rescue Groonga::Database.create(path: dir)
+        @followings = Followings.new 'Following'
+        @statuses   = Statuses.new   'Status'
+        @dms        = Statuses.new   'DirectMessage'
+        @lists      = Lists.new      'Lists@%s'
         @noretweets = Array.new
 
         log :info, "initialize"
       end
 
-      def dir(id)
-        dir = File.expand_path "atig/#{@me.screen_name}/", @tmpdir
-        log :debug, "db(#{id}) = #{dir}"
+      def dir
+        dir = File.expand_path "~/.atig/db/#{@me.screen_name}/"
+        log :debug, "db(groonga) = #{dir}"
         FileUtils.mkdir_p dir
-        File.expand_path "#{id}.#{VERSION}.db", dir
+        File.expand_path "atig.#{VERSION}.db", dir
       end
 
       def transaction(&f)
-        @followings.transaction do|_|
-          @statuses.transaction do|_|
-            @dms.transaction do|_|
-              @lists.transaction do|_|
-                f.call self
-              end
-            end
-          end
-        end
+        f.call self
       end
 
       def cleanup
-        transaction do
-          @statuses.cleanup
-          @dms.cleanup
-        end
+        @statuses.transaction do |d| d.cleanup end
+        @dms.transcation do |d| d.cleanup end
       end
     end
   end
